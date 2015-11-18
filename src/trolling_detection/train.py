@@ -155,7 +155,7 @@ def train_assembling_average(categories, comments, badwords):
     custom = CustomTransformer(badwords)
     base_estimator = LogisticRegression(tol=1e-8, penalty='l2', C=4, solver='lbfgs')
     clf = Pipeline([('vect', custom),
-                      ('clf', AdaBoostClassifier(n_estimators=100, base_estimator=base_estimator))])
+                      ('clf', AdaBoostClassifier(n_estimators=100))])
 
     final_classifier = AverageClassifier([text_clf, clf])
     final_classifier = final_classifier.fit(comments, categories)

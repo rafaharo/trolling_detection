@@ -34,15 +34,25 @@ def load_bad_words(badwords_file):
 
 
 def prediction_info(pred, ground_truth):
-    print "Accuracy: " + str(np.mean(pred==ground_truth)) + "\n"
+    print "Accuracy: " + str(np.mean(pred == ground_truth)) + "\n"
     print(metrics.classification_report(ground_truth, pred,
         target_names=['NoInsult', 'Insult']))
 
 def prediction_info_proba(pred, ground_truth):
-    from sklearn.metrics import roc_auc_score
-    temp = pred[:, 1]
-    print "Accuracy: " + str(metrics.average_precision_score(ground_truth, pred[:, 1], average='micro')) + "\n"
-    print("Area Under the Curve: %f" % roc_auc_score(ground_truth, pred[:, 1]))
+    # Extract Plain Estimations
+
+    labels = []
+    for index, prediction in enumerate(pred):
+        if prediction[0] > prediction[1]:
+            labels.append(0)
+        else:
+            labels.append(1)
+
+    labels = np.array(labels)
+
+    print "Accuracy: " + str(np.mean(labels==ground_truth)) + "\n"
+    print(metrics.classification_report(ground_truth, labels,
+        target_names=['NoInsult', 'Insult']))
 
 if __name__ == "__main__":
     import os
@@ -85,23 +95,27 @@ if __name__ == "__main__":
                 counter += 1
         print counter
         naive_predictions = np.array(naive_predictions)
+        print "\nNaive Model Result\n"
         prediction_info(naive_predictions, test_categories)
 
     if config_parser.getboolean(EXECUTION_SECTION, 'tf-idf'):
         classifier = train_basic(categories, comments)
         predictions = classifier.predict(test_comments)
+        print "\nTF-IDF Model Result\n"
         prediction_info(predictions, test_categories)
 
     if config_parser.getboolean(EXECUTION_SECTION, 'custom'):
         from train import train_custom
         classifier = train_custom(categories, comments, badwords)
         predictions = classifier.predict(test_comments)
+        print "\nCustom Model Result\n"
         prediction_info(predictions, test_categories)
 
     if config_parser.getboolean(EXECUTION_SECTION, 'average'):
         from train import train_assembling_average
         classifier = train_assembling_average(categories, comments, badwords)
         predictions = classifier.predict_proba(test_comments)
+        print "\nAverage Ensemble Model Result\n"
         prediction_info_proba(predictions, test_categories)
 
     # Pruebas
@@ -127,10 +141,12 @@ if __name__ == "__main__":
         test_documents = [tokenize_document(document, stopwords='english') for document in test_comments]
         test_vecs = w2vectorize(test_documents, model, 500)
         predictions = classifier.predict(test_vecs)
+        print "\nWord2Vec Model Result\n"
         prediction_info(predictions, test_categories)
 
     if config_parser.getboolean(EXECUTION_SECTION, 'Final'):
         from train import train_assembling
         classifier = train_assembling(categories, comments, badwords)
         predictions = classifier.predict(test_comments)
+        print "\nFeature Ensemble Model Result\n"
         prediction_info(predictions, test_categories)
