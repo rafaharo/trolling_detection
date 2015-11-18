@@ -73,5 +73,6 @@ def tokenize_document(document, lowercase=True, stopwords=None, min_length=3):
 def replace_badwords(comment, badwords):
     comment = comment.lower()
     for badword in badwords:
-        comment = comment.replace(badword, " fakeinsult ")
+        if badword is not 'fakeinsult':
+            comment = comment.replace(badword, " fakeinsult ")
     return comment

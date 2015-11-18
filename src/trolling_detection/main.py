@@ -10,8 +10,8 @@ FEATURING_SECTION = "Featuring"
 def preprocess_comment(comment):
     comment = comment.strip().strip('"')
     comment = comment.replace('_', ' ')
-    comment = comment.replace('\n', ' ')
     comment = comment.replace("\\\\", "\\")
+    comment = comment.replace('\\n', ' ')
     return comment.decode('unicode-escape')
 
 

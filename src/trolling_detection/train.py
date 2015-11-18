@@ -62,38 +62,43 @@ class CustomTransformer(BaseEstimator):
         self.badwords_ = badwords
 
     def get_feature_names(self):
-        return np.array(['n_words', 'n_chars', 'allcaps', 'max_len',
-            'mean_len', '@', '!', 'spaces', 'bad_ratio', 'n_bad',
-            'capsratio'])
+        return np.array(['n_words', 'n_chars', 'n_dwords', 'allcaps', '@', '!', 'bad_ratio', 'n_bad',
+            'capsratio', 'dicratio'])
 
     def fit(self, documents, y=None):
         return self
 
     def transform(self, documents):
+        import enchant
+        d = enchant.Dict("en_US")
+        from feature_extraction import tokenize_document
+        tokenized_documents = [tokenize_document(document) for document in documents]
         n_words = [len(c.split()) for c in documents]
+        #n_words = [len(document) for document in tokenized_documents]
         n_chars = [len(c) for c in documents]
+        n_dwords = [sum(1 for word in document if d.check(word)) for document in tokenized_documents]
+
+
         # number of uppercase words
         allcaps = [np.sum([w.isupper() for w in comment.split()])
                for comment in documents]
         # longest word
-        max_word_len = [np.max([len(w) for w in c.split()]) for c in documents]
+        #max_word_len = [np.max([len(w) for w in c.split()]) for c in documents]
         # average word length
-        mean_word_len = [np.mean([len(w) for w in c.split()])
-                                            for c in documents]
+        #mean_word_len = [np.mean([len(w) for w in c.split()])
+        #                                    for c in documents]
         # number badwords:
         n_bad = [np.sum([c.lower().count(w) for w in self.badwords_])
                                                 for c in documents]
         exclamation = [c.count("!") for c in documents]
         addressing = [c.count("@") for c in documents]
-        spaces = [c.count(" ") for c in documents]
 
         allcaps_ratio = np.array(allcaps) / np.array(n_words, dtype=np.float)
         bad_ratio = np.array(n_bad) / np.array(n_words, dtype=np.float)
+        dic_ratio = np.array(n_dwords) / np.array(n_words, dtype=np.float)
 
-        return np.array([n_words, n_chars, allcaps, max_word_len,
-            mean_word_len, exclamation, addressing, spaces, bad_ratio, n_bad,
-            allcaps_ratio]).T
-
+        return np.array([n_words, n_chars, n_dwords, allcaps, exclamation, addressing, bad_ratio, n_bad,
+            allcaps_ratio, dic_ratio]).T
 
 class AverageClassifier(BaseEstimator, ClassifierMixin):
     def __init__(self, classifiers=None):
@@ -112,21 +117,17 @@ class AverageClassifier(BaseEstimator, ClassifierMixin):
 
 def train_custom(categories, comments, badwords):
     from sklearn.pipeline import Pipeline
-    from sklearn.linear_model import LogisticRegression
-    from sklearn.ensemble import RandomForestClassifier
-    from sklearn.ensemble import AdaBoostClassifier
+    from sklearn.svm import LinearSVC
 
     text_clf = Pipeline([('vect', CustomTransformer(badwords)),
-    #text_clf = Pipeline([('vect', TfidfVectorizer(lowercase=True)),
-                      #('clf', LogisticRegression(tol=1e-8, penalty='l2', C=4))])
-                      ('clf', AdaBoostClassifier(n_estimators=100))]) # DecisionTree by default
+                      ('clf', LinearSVC())]) # DecisionTree by default
     text_clf = text_clf.fit(comments, categories)
     return text_clf
 
 
 def train_assembling(categories, comments, badwords):
     from sklearn.feature_extraction.text import TfidfVectorizer
-    from sklearn.linear_model import LogisticRegression
+    from sklearn.linear_model import LogisticRegression, SGDRegressor
     from sklearn.pipeline import Pipeline, FeatureUnion
     from sklearn.feature_selection import SelectPercentile, chi2
 
@@ -135,7 +136,6 @@ def train_assembling(categories, comments, badwords):
     countvect_word = TfidfVectorizer(ngram_range=(1, 3), analyzer="word", binary=False, min_df=3)
     custom = CustomTransformer(badwords)
     union = FeatureUnion([("custom", custom), ("tfidf", tfidf),("words", countvect_word)])
-    #clf = SGDClassifier(loss='hinge', penalty='l2', alpha=1e-3, n_iter=5, random_state=42)
     clf = LogisticRegression(tol=1e-8, penalty='l2', C=4)
     classifier = Pipeline([('vect', union), ('select', select), ('clf', clf)])
     classifier = classifier.fit(comments, categories)
@@ -153,7 +153,6 @@ def train_assembling_average(categories, comments, badwords):
                       ('clf', SGDClassifier(loss='log', penalty='l2', alpha=1e-3, n_iter=5, random_state=42))])
 
     custom = CustomTransformer(badwords)
-    base_estimator = LogisticRegression(tol=1e-8, penalty='l2', C=4, solver='lbfgs')
     clf = Pipeline([('vect', custom),
                       ('clf', AdaBoostClassifier(n_estimators=100))])
 
