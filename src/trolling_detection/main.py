@@ -1,3 +1,6 @@
+import os
+import ConfigParser
+
 TRAIN_FILE = "resources/train/train.csv"
 TEST_FILE = "resources/test/test_with_solutions.csv"
 BAD_WORDS_FILE = "resources/badwords.txt"
@@ -12,6 +15,7 @@ def preprocess_comment(comment):
     comment = comment.replace('_', ' ')
     comment = comment.replace("\\\\", "\\")
     comment = comment.replace('\\n', ' ')
+    comment = comment.lower()
     return comment.decode('unicode-escape')
 
 
@@ -31,6 +35,17 @@ def load_bad_words(badwords_file):
     with open(badwords_file) as f:
         lines = f.readlines()
         return [badword[:-1] for badword in lines]
+
+def load_bad_words_static():
+    current_dir = os.path.dirname(os.path.realpath(__file__))
+    source_path = "src/trolling_detection"
+    if source_path in current_dir:
+        index_of = current_dir.index(source_path)
+        path = current_dir[0:index_of]
+    elif current_dir.endswith("trolling_detection") and not "src" in current_dir:
+        path = current_dir
+    path = os.path.join(path, BAD_WORDS_FILE)
+    return load_bad_words(path)
 
 
 def prediction_info(pred, ground_truth):
@@ -55,12 +70,10 @@ def prediction_info_proba(pred, ground_truth):
         target_names=['NoInsult', 'Insult']))
 
 if __name__ == "__main__":
-    import os
     from trolling_detection.train import train_basic
     from trolling_detection.train import naive_classifier
     from sklearn import metrics
     import numpy as np
-    import ConfigParser
 
     current_dir = os.path.dirname(os.path.realpath(__file__))
     source_path = "src/trolling_detection"
