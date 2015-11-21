@@ -7,7 +7,6 @@ def train_basic(categories, comments):
     from sklearn.linear_model import SGDClassifier
 
     text_clf = Pipeline([('vect', TfidfVectorizer(lowercase=True, ngram_range=(1, 3), analyzer="word", min_df=3)),
-    #text_clf = Pipeline([('vect', TfidfVectorizer(lowercase=True)),
                       ('clf', SGDClassifier(loss='hinge', penalty='l2', alpha=1e-3, n_iter=5, random_state=42))])
     text_clf = text_clf.fit(comments, categories)
     return text_clf
@@ -30,7 +29,8 @@ def buildWordVector(w2vmodel, text, size):
     count = 0.
     for word in text:
         try:
-            vec += w2vmodel[word].reshape((1, size))
+            sorted_vec = np.sort(w2vmodel[word])
+            vec += sorted_vec.reshape((1, size))
             count += 1.
         except KeyError:
             continue
@@ -69,7 +69,7 @@ class CustomTransformer(BaseEstimator):
 
     def get_feature_names(self):
         return np.array(['n_words', 'n_chars', 'n_dwords', 'you_re', 'allcaps', '@', '!', 'bad_ratio', 'n_bad',
-            'capsratio', 'dicratio'])
+            'capsratio', 'dicratio' 'sent'])
 
     def fit(self, documents, y=None):
         return self
@@ -77,13 +77,55 @@ class CustomTransformer(BaseEstimator):
     def transform(self, documents):
         import enchant
         import re
+        import sentlex
+        from pattern.en import tag as tagger
+
         d = enchant.Dict("en_US")
+        SWN = sentlex.SWN3Lexicon()
         from feature_extraction import tokenize_document
         tokenized_documents = [tokenize_document(document) for document in documents]
         n_words = [len(c.split()) for c in documents]
         #n_words = [len(document) for document in tokenized_documents]
         n_chars = [len(c) for c in documents]
         n_dwords = [sum(1 for word in document if d.check(word)) for document in tokenized_documents]
+
+        sent_pos = []
+        sent_neg = []
+        for comment in documents:
+            count = 0.
+            pos_sum = 0.
+            neg_sum = 0.
+            for word, tag in tagger(comment.lower()):
+                if word == 'fakeinsult':
+                    pos_sum += 0.
+                    neg_sum += 1.
+                    count += 1.
+                    continue
+                if tag.startswith('RB'):
+                    sentiment = SWN.getadverb(word)
+                    pos_sum += sentiment[0]
+                    neg_sum += sentiment[1]
+                    count += 1.
+                elif tag.startswith('NN'):
+                    sentiment = SWN.getnoun(word)
+                    pos_sum += sentiment[0]
+                    neg_sum += sentiment[1]
+                    count += 1.
+                if tag.startswith('JJ'):
+                    sentiment = SWN.getadjective(word)
+                    pos_sum += sentiment[0]
+                    neg_sum += sentiment[1]
+                    count += 1.
+                if tag.startswith('VB'):
+                    sentiment = SWN.getverb(word)
+                    pos_sum += sentiment[0]
+                    neg_sum += sentiment[1]
+                    count += 1.
+            if count != 0:
+                pos_sum /= count
+                neg_sum /= count
+            sent_neg.append(neg_sum)
+            sent_pos.append(pos_sum)
 
         n_you_re = [len(re.findall(self.__you_re, document)) for document in documents]
         n_you = [len(re.findall(self.__you, document)) for document in documents]
@@ -106,7 +148,8 @@ class CustomTransformer(BaseEstimator):
         dic_ratio = np.array(n_dwords) / np.array(n_words, dtype=np.float)
 
         return np.array([n_words, n_chars, n_dwords, n_you_re, n_you, exclamation, allcaps,
-                         addressing, bad_ratio, n_bad, allcaps_ratio, dic_ratio]).T
+                         addressing, bad_ratio, n_bad, allcaps_ratio, dic_ratio,
+                         sent_pos]).T
 
     def get_params(self, deep=True):
         if not deep:
@@ -136,6 +179,8 @@ class AverageClassifier(BaseEstimator, ClassifierMixin):
 def train_custom(categories, comments, badwords):
     from sklearn.pipeline import Pipeline
     from sklearn.svm import LinearSVC
+    from sklearn.ensemble import GradientBoostingRegressor
+
 
     text_clf = Pipeline([('vect', CustomTransformer(badwords)),
                       ('clf', LinearSVC(random_state=42))])
@@ -170,10 +215,8 @@ def train_assembling_average(categories, comments, badwords):
 
     custom = CustomTransformer(badwords)
     clf = Pipeline([('vect', custom),
-                      #('clf', SGDClassifier(loss='log', penalty='l2', alpha=1e-3, n_iter=5, random_state=42))])
                     ('clf', SGDClassifier(loss='log', penalty='l2', alpha=1e-3, n_iter=5, random_state=42))])
 
-    #final_classifier = AverageClassifier([text_clf, clf])
     final_classifier = VotingClassifier(estimators=[('text', text_clf), ('custom', clf)],
                                         voting='soft', weights=[3,1])
     final_classifier = final_classifier.fit(comments, categories)

@@ -15,6 +15,7 @@ def preprocess_comment(comment):
     comment = comment.replace('_', ' ')
     comment = comment.replace("\\\\", "\\")
     comment = comment.replace('\\n', ' ')
+    comment = comment.replace('\\n', ' ')
     comment = comment.lower()
     return comment.decode('unicode-escape')
 
@@ -58,10 +59,16 @@ def prediction_info_proba(pred, ground_truth):
 
     labels = []
     for index, prediction in enumerate(pred):
-        if prediction[0] > prediction[1]:
-            labels.append(0)
+        if isinstance(prediction, list):
+            if prediction[0] > prediction[1]:
+                labels.append(0)
+            else:
+                labels.append(1)
         else:
-            labels.append(1)
+            if prediction >= 0.5:
+                labels.append(1)
+            else:
+                labels.append(0)
 
     labels = np.array(labels)
 
@@ -72,6 +79,9 @@ def prediction_info_proba(pred, ground_truth):
 if __name__ == "__main__":
     from trolling_detection.train import train_basic
     from trolling_detection.train import naive_classifier
+    from trolling_detection.feature_extraction import corpus_stats
+    from trolling_detection.feature_extraction import collection_text_similarity
+    from trolling_detection.feature_extraction import tf_idf_stats
     from sklearn import metrics
     import numpy as np
 
@@ -87,6 +97,7 @@ if __name__ == "__main__":
     categories, comments = load_csv_data(os.path.join(path, TRAIN_FILE))
     test_categories, test_comments = load_csv_data(os.path.join(path, TEST_FILE))
     assert len(categories) == len(comments) == 3947
+    raw_comments = comments[:]
     config_parser = ConfigParser.ConfigParser()
     config_parser.read(os.path.join(path, INI_FILE))
 
@@ -97,16 +108,20 @@ if __name__ == "__main__":
         comments = [replace_badwords(comment, badwords) for comment in comments]
         test_comments = [replace_badwords(comment, badwords) for comment in test_comments]
 
+    # corpus_stats(comments)
+    # print "\n"
+    #
+    # similarity = collection_text_similarity(['You sound stupid LOL',
+    #                                          'You sound retarded LOL',
+    #                                          'You are very nice'])
+    # print similarity
+    #
+    # tf_idf_stats(comments)
+
     if config_parser.getboolean(EXECUTION_SECTION, 'naive'):
         naive_predictions = []
         for comment in test_comments:
             naive_predictions.append(naive_classifier(comment,  badwords, fake=fake))
-        counter = 0
-        for i, category in enumerate(test_categories):
-            if category == 0 and naive_predictions[i] == 1:
-                #print test_comments[i]
-                counter += 1
-        print counter
         naive_predictions = np.array(naive_predictions)
         print "\nNaive Model Result\n"
         prediction_info(naive_predictions, test_categories)
@@ -122,7 +137,7 @@ if __name__ == "__main__":
         classifier = train_custom(categories, comments, badwords)
         predictions = classifier.predict(test_comments)
         print "\nCustom Model Result\n"
-        prediction_info(predictions, test_categories)
+        prediction_info_proba(predictions, test_categories)
 
     if config_parser.getboolean(EXECUTION_SECTION, 'average'):
         from train import train_assembling_average
@@ -138,13 +153,29 @@ if __name__ == "__main__":
         from feature_extraction import language_model
         from feature_extraction import word2vec_model
         #collocations = extract_top_bigrams_collocations(comments, 10, windows_size=5,filter_word='fakeinsult')
-        collocations = extract_top_bigrams_collocations(comments, 10, windows_size=5)
+
+        collocations = extract_top_bigrams_collocations(comments, 10, windows_size=2, filter_word='sound')
+        print "\n"
         print collocations
-        similar_words(comments, "loser")
+        print "\n"
+
+
+        similar_words(comments, "fakeinsult")
+
+
         model = language_model(comments)
-        print model["are"].samples()
+
+        print "\nSamples: "
+        import pprint
+        printer = pprint.PrettyPrinter(indent=4)
+        printer.pprint(model["sound"].samples())
+
+        print "\n"
+
         model = word2vec_model(comments)
         print model.similarity('retarded', 'loser')
+
+
 
     if config_parser.getboolean(EXECUTION_SECTION, 'WordVec'):
         from train import train_word2vec
