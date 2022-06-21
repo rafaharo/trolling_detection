@@ -57,7 +57,7 @@ nbformat==5.0.8
 nest-asyncio==1.4.1
 nltk==3.5
 notebook==6.1.4
-numpy==1.18.5
+numpy==1.22.0
 oauthlib==3.1.0
 opt-einsum==3.3.0
 packaging==20.4
